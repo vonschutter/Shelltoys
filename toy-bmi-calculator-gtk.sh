@@ -1,65 +1,93 @@
 #!/bin/bash
+BMI_CALCULATOR_VERSION="1.01"
+PUBLICATION="BMI Calculator   Version: ${BMI_CALCULATOR_VERSION} "
+#
+#
 
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" &> /dev/null
+
+dependency::file ()
+{
+	local _src_url="https://github.com/${_GIT_PROFILE:-vonschutter}/RTD-Setup/raw/main/core/${1}"
+	local _tgt="${1}"
+
+	dependency::search_local ()
+	{
+		echo "${FUNCNAME[0]}: Requested dependency file: ${1} ..."
+
+		for i in "./${1}" \
+                 "../core/${1}" \
+                 "../../core/${1}" \
+                 "${0%/*}/../core/${1}" \
+                 "${0%/*}/../../core/${1}" \
+                 "$(find /opt -name ${1} \
+                 |grep -v bakup )" ; do 
+			echo "${FUNCNAME[0]}: Searching for ${i} ..."
+			if [[ -e "${i}" ]] ; then 
+				echo "${FUNCNAME[0]}: Found ${i}"
+				source "${i}" ""
+				return 0
+			fi
+		done
+		return 1
+	}
+
+	if dependency::search_local "${1}" ; then
+		return 0
+	else
+		echo "$(date) failure to find $1 on the local comuter, now searching online..."
+		if curl -sL "$_src_url" | source /dev/stdin ; then 
+			echo "${FUNCNAME[0]} Using: ${_src_url} directly from URL..."
+		elif wget "${_src_url}" &>/dev/null ; then
+			source ./"${1}"
+			echo "${FUNCNAME[0]} Using: ${_src_url} downloaded..."
+		else 
+			echo "${FUNCNAME[0]} Failed to find  ${1} "
+			exit 1
+		fi
+	fi 
 }
 
-# Function to install required packages on Debian-based systems
-install_debian() {
-    sudo apt-get update
-    sudo apt-get install -y yad bc
-}
+dependency::file "_rtd_library"
 
-# Function to install required packages on Red Hat-based systems
-install_redhat() {
-    sudo yum install -y yad bc
-}
 
 # Detect the operating system and install yad and bc if not present
-if ! command_exists yad || ! command_exists bc; then
-    if [ -f /etc/debian_version ]; then
-        install_debian
-    elif [ -f /etc/redhat-release ]; then
-        install_redhat
-    else
-        echo "Unsupported OS. Please install 'yad' and 'bc' manually."
-        exit 1
-    fi
+if ! dependency::command_exists yad || ! dependency::command_exists bc; then
+    software::check_native_package_dependency yad
+    software::check_native_package_dependency bc
 fi
 
 # Function to display an input box and get the value
-get_input() {
+bmi::get_input() {
     local prompt=$1
-    local value=$(yad --entry --title="BMI Calculator" --text="$prompt" --width=300 --center)
+    local value=$(yad --entry --title="${PUBLICATION}" --text="$prompt" --width=300 --center)
     echo $value
 }
 
 # Get weight in kilograms
-weight=$(get_input "Enter your weight in kilograms:")
+weight=$(bmi::get_input "Enter your weight in kilograms:")
 if [ -z "$weight" ]; then
-    yad --info --title="Error" --text="Weight cannot be empty!" --width=300 --center
+    yad --info --title="${PUBLICATION}: Error" --text="Weight cannot be empty!" --width=300 --center
     clear
     exit 1
 fi
 
 # Get height in centimeters
-height=$(get_input "Enter your height in centimeters:")
+height=$(bmi::get_input "Enter your height in centimeters:")
 if [ -z "$height" ]; then
-    yad --info --title="Error" --text="Height cannot be empty!" --width=300 --center
+    yad --info --title="${PUBLICATION}: Error" --text="Height cannot be empty!" --width=300 --center
     clear
     exit 1
 fi
 
 # Ensure weight and height are numeric
 if ! [[ "$weight" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-    yad --info --title="Error" --text="Weight must be a numeric value!" --width=300 --center
+    yad --info --title="${PUBLICATION}: Error" --text="Weight must be a numeric value!" --width=300 --center
     clear
     exit 1
 fi
 
 if ! [[ "$height" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-    yad --info --title="Error" --text="Height must be a numeric value!" --width=300 --center
+    yad --info --title="${PUBLICATION}: Error" --text="Height must be a numeric value!" --width=300 --center
     clear
     exit 1
 fi
@@ -84,7 +112,7 @@ else
 fi
 
 # Show the result
-yad --info --title="BMI Result" --text="Your BMI is: $bmi\n\nInterpretation: $interpretation\n\nRecommendation: $recommendation" --width=400 --center
+yad --info --title="${PUBLICATION}: BMI Result" --text="Your BMI is: $bmi\n\nInterpretation: $interpretation\n\nRecommendation: $recommendation" --width=400 --center
 
 # Clear the screen after yad closes
 clear
